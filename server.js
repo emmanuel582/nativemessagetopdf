@@ -59,14 +59,26 @@ async function getBrowser() {
   return browserPromise;
 }
 
+function str(v) {
+  // Tolerate wrappers some clients add, e.g. {source:{value:"<html>…"}}.
+  let depth = 0;
+  while (v != null && typeof v === 'object' && depth < 4) {
+    if (typeof v.value === 'string') { v = v.value; break; }
+    if (Array.isArray(v) && typeof v[0] === 'string') { v = v[0]; break; }
+    break;
+  }
+  return typeof v === 'string' ? v : '';
+}
+
 function pickSource(body = {}) {
   if (typeof body === 'string') return body;
-  if (typeof body.source === 'string' && body.source.trim()) return body.source;
-  if (typeof body.html_source === 'string' && body.html_source.trim()) return body.html_source;
-  if (typeof body.html === 'string' && body.html.trim()) return body.html;
-  if (typeof body.content === 'string' && body.content.trim()) return body.content;
-  if (body.data && typeof body.data.source === 'string' && body.data.source.trim()) return body.data.source;
-  return '';
+  return (
+    str(body.source) ||
+    str(body.html_source) ||
+    str(body.html) ||
+    str(body.content) ||
+    (body.data ? str(body.data.source) || str(body.data.html_source) : '')
+  );
 }
 
 function escapeHtml(s) {
