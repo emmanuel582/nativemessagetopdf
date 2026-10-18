@@ -161,6 +161,14 @@ async function handleConvert(req, res) {
     // "No error": even an empty source returns a valid PDF (notice page).
     const html = source ? buildDocument(source, meta) : errorDocument('Empty source received; expected JSON like {"source":"<html>…","format":"A4"}.');
     const pdf = Buffer.from(await htmlToPdfBuffer(html));
+    // n8n Body-to-PDF path needs bytes inline (no binary step): opt in via {"response":"base64"}.
+    if (String(b.response || '').toLowerCase() === 'base64') {
+      return res.status(200).json({
+        pdf_base64: pdf.toString('base64'),
+        bytes: pdf.length,
+        filename: b.filename || b.name || 'message.pdf',
+      });
+    }
     res.writeHead(200, {
       'Content-Type': 'application/pdf',
       'Content-Length': String(pdf.length),
