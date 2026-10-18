@@ -78,14 +78,19 @@ function escapeHtml(s) {
 }
 
 // Never touch the message itself: strip only executable bits, keep Outlook
-// tables/images/text exactly as supplied, then add print-only styling.
+// tables/images/branding exactly as supplied, then add print-only styling.
+// An export-evidence banner (subject/from/date) is prepended outside the
+// original markup so the mail design itself is untouched.
 function buildDocument(sourceHtml, meta) {
   const cleaned = String(sourceHtml)
     .replace(/<script[\s\S]*?<\/script\s*>/gi, '')
     .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
 
   const hasHtml = /<\s*html[\s>]/i.test(cleaned);
-  const inner = hasHtml ? cleaned : `<div class="msg"><h2 class="subject">${escapeHtml(meta.subject || 'Email message')}</h2><div class="meta">${escapeHtml(meta.info || '')}</div><div class="body">${cleaned}</div></div>`;
+  const banner = (meta.subject || meta.from || meta.date)
+    ? `<div class="evidence"><div class="ev-subject">${escapeHtml(meta.subject || 'Email message')}</div><div class="ev-meta">${escapeHtml([meta.from, meta.date].filter(Boolean).join('  ·  '))} · exported from Outlook</div></div>`
+    : '';
+  const inner = hasHtml ? cleaned : `<div class="msg"><h2 class="subject">${escapeHtml(meta.subject || 'Email message')}</h2><div class="body">${cleaned}</div></div>`;
 
   return `<!doctype html>
 <html><head><meta charset="utf-8">
@@ -95,8 +100,10 @@ function buildDocument(sourceHtml, meta) {
   html, body { margin: 0; padding: 0; }
   body { font: 12px/1.55 "Segoe UI", Arial, Helvetica, sans-serif; color: #1a1a1a; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .sheet { max-width: 100%; }
+  .evidence { border: 1px solid #e0e0e0; border-left: 4px solid #7b1fa2; background: #faf7fd; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
+  .ev-subject { font-size: 14px; font-weight: 700; color: #111; }
+  .ev-meta { font-size: 10.5px; color: #666; margin-top: 2px; }
   h1.subject, h2.subject { font-size: 17px; line-height: 1.3; margin: 0 0 4px 0; color: #111; }
-  .meta { font-size: 10.5px; color: #666; margin-bottom: 10px; border-bottom: 1px solid #e3e3e3; padding-bottom: 8px; }
   pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 Consolas, "Courier New", monospace; background: #fafafa; border: 1px solid #eee; border-radius: 6px; padding: 10px 12px; margin: 0; }
   table { width: 100% !important; border-collapse: collapse; margin: 10px 0; page-break-inside: auto; }
   th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; font-size: 11.5px; vertical-align: top; }
@@ -107,8 +114,7 @@ function buildDocument(sourceHtml, meta) {
   blockquote { border-left: 3px solid #ddd; margin: 8px 0; padding: 4px 10px; color: #444; }
   .footer { margin-top: 12px; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 6px; }
 </style>
-${hasHtml ? '<!-- source already full html; css injected --><style></style>' : ''}
-</head><body><div class="sheet">${hasHtml ? cleaned.replace(/<\s*head[\s\S]*?<\/\s*head\s*>/i, '').replace(/<\s*\/?\s*html[^>]*>/gi, '').replace(/<\s*\/?\s*body[^>]*>/gi, '') : inner}
+</head><body><div class="sheet">${banner}${hasHtml ? cleaned.replace(/<\s*head[\s\S]*?<\/\s*head\s*>/i, '').replace(/<\s*\/?\s*html[^>]*>/gi, '').replace(/<\s*\/?\s*body[^>]*>/gi, '') : inner}
 <div class="footer">Rendered by nativemessagetopdf · ${escapeHtml(PAGE_FORMAT)} · ${new Date().toISOString().slice(0, 10)}</div>
 </div></body></html>`;
 }
@@ -133,9 +139,15 @@ async function handleConvert(req, res) {
   const started = Date.now();
   try {
     const source = pickSource(req.body);
-    const subject = req.body && (req.body.subject || (req.body.data && req.body.data.subject)) || '';
+    const b = req.body || {};
+    const d = b.data || {};
+    const meta = {
+      subject: b.subject || d.subject || '',
+      from: b.from || d.from || b.sender || '',
+      date: b.date || d.date || b.receivedDateTime || '',
+    };
     // "No error": even an empty source returns a valid PDF (notice page).
-    const html = source ? buildDocument(source, { subject }) : errorDocument('Empty source received; expected JSON like {"source":"<html>…","format":"A4"}.');
+    const html = source ? buildDocument(source, meta) : errorDocument('Empty source received; expected JSON like {"source":"<html>…","format":"A4"}.');
     const pdf = Buffer.from(await htmlToPdfBuffer(html));
     res.writeHead(200, {
       'Content-Type': 'application/pdf',
