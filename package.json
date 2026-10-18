@@ -1,0 +1,19 @@
+{
+  "name": "nativemessagetopdf",
+  "version": "1.0.0",
+  "description": "Drop-in pdfshift replacement: HTML (Outlook body) -> neat A4 PDF binary for n8n",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/convert.test.js"
+  },
+  "dependencies": {
+    "@sparticuz/chromium": "^131.0.1",
+    "express": "^4.19.2",
+    "puppeteer-core": "^23.4.1"
+  },
+  "license": "MIT"
+}

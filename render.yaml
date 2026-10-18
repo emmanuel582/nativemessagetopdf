@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: nativemessagetopdf
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: PDF_PAGE_FORMAT
+        value: A4
